@@ -1,0 +1,277 @@
+{
+  "name": "Atendimento ao Cliente - Telegram + Gemini",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const resultado = (() => {\n  const sd = $getWorkflowStaticData('global');\n\n  const updates         = $json.result || [];\n  const workflowStartTs = sd.workflowStartTs || 0;\n  let   maiorUpdateId   = sd.ultimoUpdateId  || 0;\n\n  if (updates.length === 0) {\n    sd.ultimoUpdateId = maiorUpdateId;\n    return [];\n  }\n\n  // ── Persistência entre execuções ────────────────────────────────────────────\n  if (!sd.pedidoAtivo) sd.pedidoAtivo = {};\n  if (!sd.historico)   sd.historico   = {};\n\n  // ── Banco de dados ──────────────────────────────────────────────────────────\n  const pedidosDB = [\n    {\n      id: \"A7K2MX\", cliente: \"João Silva\", produto: \"Tênis Esportivo Azul\",\n      sku: \"TEN-AZL-42\", qtd: 1,\n      status: \"em_transito\", statusLabel: \"Em trânsito\",\n      etapa: \"Saiu para entrega\",\n      transportadora: \"Jadlog\", rastreio: \"JD123456789BR\",\n      urlRastreio: \"https://www.jadlog.com.br/rastreamento?codigo=JD123456789BR\",\n      previsao: \"12/06/2026\", dataEnvio: \"07/06/2026\",\n      dataPedido: \"01/06/2026\", dataEntrega: null,\n      frete: 30.00, desconto: 0, total: 249.90,\n      pagamento: \"Cartão de Crédito\", parcelas: 3,\n      devol: true, reemb: false, prazoDevol: 7, motCancel: null\n    },\n    {\n      id: \"BQ9R3T\", cliente: \"Maria Souza\", produto: \"Bolsa Feminina Couro\",\n      sku: \"BOL-COZ-UNI\", qtd: 1,\n      status: \"entregue\", statusLabel: \"Entregue\",\n      etapa: \"Entregue ao destinatário\",\n      transportadora: \"Correios\", rastreio: \"BR987654321BR\",\n      urlRastreio: \"https://rastreamento.correios.com.br/app/index.php?codigo=BR987654321BR\",\n      previsao: \"05/06/2026\", dataEnvio: \"31/05/2026\",\n      dataPedido: \"28/05/2026\", dataEntrega: \"04/06/2026\",\n      frete: 30.00, desconto: 0, total: 399.00,\n      pagamento: \"PIX\", parcelas: 1,\n      devol: true, reemb: true, prazoDevol: 5, motCancel: null\n    },\n    {\n      id: \"CP4H7N\", cliente: \"Carlos Oliveira\", produto: \"Fone Bluetooth Premium\",\n      sku: \"FON-BT-PRE\", qtd: 1,\n      status: \"aguardando_pagamento\", statusLabel: \"Aguardando pagamento\",\n      etapa: \"Pedido criado - pagamento pendente\",\n      transportadora: null, rastreio: null, urlRastreio: null,\n      previsao: null, dataEnvio: null,\n      dataPedido: \"07/06/2026\", dataEntrega: null,\n      frete: 0, desconto: 0, total: 189.90,\n      pagamento: \"Boleto Bancário\", parcelas: 1,\n      devol: false, reemb: false, prazoDevol: 0, motCancel: null\n    },\n    {\n      id: \"DW6J1E\", cliente: \"Ana Lima\", produto: \"Camiseta Estampada\",\n      sku: \"CAM-EST-M\", qtd: 2,\n      status: \"cancelado\", statusLabel: \"Cancelado\",\n      etapa: \"Pedido cancelado\",\n      transportadora: null, rastreio: null, urlRastreio: null,\n      previsao: null, dataEnvio: null,\n      dataPedido: \"03/06/2026\", dataEntrega: null,\n      frete: 0, desconto: 0, total: 79.90,\n      pagamento: \"Cartão de Débito\", parcelas: 1,\n      devol: false, reemb: true, prazoDevol: 0, motCancel: \"Desistência do cliente\"\n    },\n    {\n      id: \"EV5L8Z\", cliente: \"Roberto Ferreira\", produto: \"Mochila Executiva Impermeável\",\n      sku: \"MOC-EXE-PRE\", qtd: 1,\n      status: \"processando\", statusLabel: \"Processando\",\n      etapa: \"Separação no armazém\",\n      transportadora: \"Total Express\", rastreio: null, urlRastreio: null,\n      previsao: \"15/06/2026\", dataEnvio: null,\n      dataPedido: \"08/06/2026\", dataEntrega: null,\n      frete: 20.00, desconto: 40.00, total: 299.90,\n      pagamento: \"Cartão de Crédito\", parcelas: 6,\n      devol: false, reemb: false, prazoDevol: 0, motCancel: null\n    },\n    {\n      id: \"FX3G9S\", cliente: \"Fernanda Costa\", produto: \"Kit Skincare Hidratação\",\n      sku: \"KIT-SKC-HID\", qtd: 1,\n      status: \"em_transito\", statusLabel: \"Em trânsito\",\n      etapa: \"Em rota de distribuição regional\",\n      transportadora: \"Correios PAC\", rastreio: \"PA556677889BR\",\n      urlRastreio: \"https://rastreamento.correios.com.br/app/index.php?codigo=PA556677889BR\",\n      previsao: \"14/06/2026\", dataEnvio: \"09/06/2026\",\n      dataPedido: \"05/06/2026\", dataEntrega: null,\n      frete: 15.00, desconto: 0, total: 174.90,\n      pagamento: \"PIX\", parcelas: 1,\n      devol: true, reemb: false, prazoDevol: 10, motCancel: null\n    }\n  ];\n\n  // ── Links do site ───────────────────────────────────────────────────────────\n  const SITE = {\n    reembolso:  \"https://minhaloja.com.br/reembolso\",\n    devolucao:  \"https://minhaloja.com.br/devolucao\",\n    rastreio:   \"https://minhaloja.com.br/rastrear\",\n    segundavia: \"https://minhaloja.com.br/segunda-via\",\n    conta:      \"https://minhaloja.com.br/minha-conta\",\n    suporte:    \"https://minhaloja.com.br/suporte\",\n    faq:        \"https://minhaloja.com.br/ajuda\"\n  };\n\n  // ── Detecta código de pedido na mensagem ────────────────────────────────────\n  function extrairCodigo(texto) {\n    const match = texto.toUpperCase().match(/\\b([A-Z0-9]{6})\\b/);\n    if (!match) return null;\n    return pedidosDB.find(p => p.id === match[1]) ? match[1] : null;\n  }\n\n  // ── System prompt ───────────────────────────────────────────────────────────\n  const SYSTEM_PROMPT = `Você é o atendente virtual da MinhaLoja. Seja breve, direto e empático.\n\nPRIVACIDADE: Nunca revele dados por nome ou CPF. Busca sempre pelo código de 6 caracteres (ex: A7K2MX). Nunca exiba CPF, telefone ou endereço completo.\n\nMEMÓRIA DE PEDIDO: Se \"pedidoAtivo\" nos dados do sistema estiver preenchido, o cliente já identificou o pedido nesta sessão. Use os dados automaticamente sem pedir o código de novo. Só peça o código se \"pedidoAtivo\" for null.\n\nPALAVRAS-CHAVE (reconheça mesmo escritas sozinhas):\n- \"rastreio\" / \"onde está\" → status + link da transportadora\n- \"devolução\" / \"devolver\" / \"trocar\" → fluxo de devolução\n- \"reembolso\" / \"dinheiro de volta\" → fluxo de reembolso\n- \"boleto\" / \"segunda via\" / \"nota fiscal\" → ${SITE.segundavia}\n- \"prazo\" / \"previsão\" → previsão de entrega\n- \"cancelar\" → informar status de cancelamento\n- \"outro\" / \"menu\" / \"opções\" → exibir menu numerado + link suporte\n- \"humano\" / \"atendente\" / \"falar com alguém\" → ${SITE.suporte}\n- \"obrigado\" / \"valeu\" / \"ok\" → encerrar com mensagem amigável\n\nMENU (exibir quando pedir \"outro\", \"menu\" ou \"opções\"):\n1. Rastreamento do pedido\n2. Solicitar devolução\n3. Solicitar reembolso\n4. Segunda via de boleto ou nota fiscal\n5. Cancelamento\n6. Falar com atendente humano: ${SITE.suporte}\n\nLÓGICA POR STATUS:\n- em_transito: etapa + transportadora + rastreio + link da transportadora + previsão\n- processando: etapa + previsão de envio\n- aguardando_pagamento: boleto pendente + ${SITE.segundavia}\n- entregue: confirmação + oferecer devol/reemb conforme elegibilidade\n- cancelado: motivo + ${SITE.reembolso} se reemb=true\n- devol=true e prazoDevol>0: ${SITE.devolucao} + prazo restante\n- devol=false ou prazoDevol=0: não elegível + ${SITE.faq}\n- reemb=true: ${SITE.reembolso} + prazo 5 dias úteis\n- reemb=false: não elegível + ${SITE.faq}\n\nFORMATO: Texto simples. Sem Markdown, asteriscos ou colchetes. Máximo 10 linhas. Emojis com moderação.`;\n\n  // ── Loop principal ──────────────────────────────────────────────────────────\n  const vistoNestaExecucao = new Set();\n  const saida = [];\n\n  for (const update of updates) {\n    const updateId = update.update_id;\n    if (updateId > maiorUpdateId) maiorUpdateId = updateId;\n\n    if (!update.message || !update.message.text) continue;\n\n    const msgTs = update.message.date;\n    if (msgTs < workflowStartTs) continue;\n    if (vistoNestaExecucao.has(updateId)) continue;\n    vistoNestaExecucao.add(updateId);\n\n    const chatId   = update.message.chat.id;\n    const mensagem = update.message.text;\n    const chatKey  = String(chatId);\n\n    // Detecta e salva novo código de pedido\n    const codigoNaMensagem = extrairCodigo(mensagem);\n    if (codigoNaMensagem) sd.pedidoAtivo[chatKey] = codigoNaMensagem;\n\n    // Recupera pedido ativo desta sessão\n    const codigoAtivo = sd.pedidoAtivo[chatKey] || null;\n    const pedidoAtivo = codigoAtivo ? pedidosDB.find(p => p.id === codigoAtivo) : null;\n\n    // Recupera e limita histórico da conversa (máximo 10 turnos)\n    const hist = sd.historico[chatKey] || [];\n\n    // Monta histórico em texto para o AI Agent\n    const historicoFormatado = hist.length > 0\n      ? hist.map(h => `Cliente: ${h.user}\\nAssistente: ${h.model}`).join(\"\\n\\n\")\n      : \"\";\n\n    // Monta contexto completo\n    const contextoCompleto =\n      SYSTEM_PROMPT +\n      \"\\n\\n[DADOS DO SISTEMA - NAO EXIBIR AO CLIENTE]\\n\" +\n      JSON.stringify({ pedidoAtivo: pedidoAtivo || null }) +\n      (historicoFormatado ? \"\\n\\n[HISTORICO DA CONVERSA]\\n\" + historicoFormatado : \"\") +\n      \"\\n\\n[PEDIDOS DISPONIVEIS - NAO EXIBIR AO CLIENTE]\\n\" +\n      JSON.stringify(pedidosDB);\n\n    saida.push({\n      json: {\n        chatId,\n        mensagem,\n        nomeUsuario:  update.message.from.first_name || \"Cliente\",\n        updateId,\n        msgTimestamp: msgTs,\n        chatKey,\n        contexto: contextoCompleto\n      }\n    });\n  }\n\n  sd.ultimoUpdateId = maiorUpdateId;\n  return saida;\n})();\n\nreturn resultado;"
+      },
+      "id": "ef810b4c-7680-485a-92b9-0627147fe1c8",
+      "name": "Preparar Dados da Mensagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2768,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "9d893931-6982-488d-9b9a-5ffd977af061",
+      "name": "Schedule Trigger - Polling1",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        2016,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\n\nif (!sd.workflowStartTs) {\n  sd.workflowStartTs = Math.floor(Date.now() / 1000);\n}\n\nconst ultimoUpdateId  = sd.ultimoUpdateId  || 0;\nconst workflowStartTs = sd.workflowStartTs;\n\nreturn [{ json: { ultimoUpdateId, workflowStartTs } }];"
+      },
+      "id": "716668db-5aec-4dd3-9f7e-ff34a7e83d36",
+      "name": "Leitura Unica1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.telegram.org/bot8718995814:AAFfNks5UF-26zPWMlaj9JviZCvHsVnAJX0/getUpdates",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "offset",
+              "value": "={{ $json.ultimoUpdateId + 1 }}"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            },
+            {
+              "name": "timeout",
+              "value": "55"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "45cd4c03-9590-4643-8e62-77f34f5dcd85",
+      "name": "Telegram (getUpdates)1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2464,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.chatId }}"
+      },
+      "id": "2240ede9-0b12-4bc2-8ea5-845a48d75aee",
+      "name": "Memória da Conversa1",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.2,
+      "position": [
+        3104,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.mensagem }}\n\n[DADOS DO SISTEMA - NÃO EXIBIR AO CLIENTE]\n{{ $json.contexto }}",
+        "options": {}
+      },
+      "id": "c00597be-5a94-4521-9d66-47d3d3691f0f",
+      "name": "AI Agent - Conversa com...1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        3008,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const resposta = $json.output || \"Desculpe, não consegui processar sua mensagem. Tente novamente.\";\nconst chatId   = $('Preparar Dados da Mensagem').item.json.chatId;\n\nreturn [{ json: { chatId, texto: resposta } }];\nconst sd = $getWorkflowStaticData('global');\nif (!sd.historico) sd.historico = {};\nconst chatKey = String(chatId);\nconst hist = sd.historico[chatKey] || [];\nhist.push({ user: $('Preparar Dados da Mensagem').item.json.mensagem, model: textoLimpo });\nif (hist.length > 10) hist.shift();\nsd.historico[chatKey] = hist;"
+      },
+      "id": "d5aa61d5-6973-4d16-a59a-79542624f105",
+      "name": "Formatar Resposta1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3376,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.telegram.org/bot8718995814:AAFfNks5UF-26zPWMlaj9JviZCvHsVnAJX0/sendMessage",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $json.chatId }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.texto }}"
+            },
+            {
+              "name": "parse_mode",
+              "value": "Markdown"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "55c9f057-58f4-45af-8903-4197e5f87a43",
+      "name": "Telegram - Enviar Resposta1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3584,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "3b945d07-5f3d-462b-ad60-9ac770046501",
+      "name": "Agente Gemini - Atendenauto1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        3008,
+        864
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rsIUBOWPNmTtHQPu",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Preparar Dados da Mensagem": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Conversa com...1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger - Polling1": {
+      "main": [
+        [
+          {
+            "node": "Leitura Unica1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leitura Unica1": {
+      "main": [
+        [
+          {
+            "node": "Telegram (getUpdates)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram (getUpdates)1": {
+      "main": [
+        [
+          {
+            "node": "Preparar Dados da Mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memória da Conversa1": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent - Conversa com...1",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Conversa com...1": {
+      "main": [
+        [
+          {
+            "node": "Formatar Resposta1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatar Resposta1": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Enviar Resposta1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente Gemini - Atendenauto1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Conversa com...1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "b8ed12c2-0c6c-4169-afce-64b8203966d0",
+  "meta": {
+    "instanceId": "508562b3aaaf59b481a28c04f587f6e83d8aa0d338c87f6653ef7c403ec79030"
+  },
+  "nodeGroups": [],
+  "id": "Nmx0M1hyoMl2osCw",
+  "tags": []
+}
